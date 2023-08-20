@@ -63,24 +63,24 @@ class Reference:
     def update_rectangle(self,dt,size):
         #this method updates the reference in a rectangular format
         dt = dt/5
-        while dt > 16: 
-            dt = dt-16
+        while dt > 8: 
+            dt = dt- 8
         
-        if dt < 4:
+        if dt < 2:
             self.x = self.xi + dt*size
             self.y = self.yi
-        elif dt < 8:
-            dt = dt - 4
-            self.x = self.xi + 4*size
+        elif dt < 4:
+            dt = dt - 2
+            self.x = self.xi + 2*size
             self.y = self.yi + dt*size
-        elif dt < 12:
-            dt = dt - 8
-            self.x = self.xi + (4-dt)*size
-            self.y = self.yi + 4*size
+        elif dt < 6:
+            dt = dt - 4
+            self.x = self.xi + (2-dt)*size
+            self.y = self.yi + 2*size
         else:
-            dt = dt -12
+            dt = dt - 6
             self.x = self.xi
-            self.y = self.yi + (4-dt)*size
+            self.y = self.yi + (2-dt)*size
 
 
 class Time:
@@ -164,7 +164,12 @@ def get_angleV_V(reference,position,quaternion,kp,ki,kd):  #take reference objec
     dtheta = atan2(dy,dx) - quaternion.get_zangle()  #use atan2 to get reference angle, and subtract current angle from reference to get error
     dv = sqrt(dx**2+dy**2)                              #use distance from current position to reference as error
 
-    if dtheta > 1: dv = 0
+    #This is where it all went wrong!!! The angle error becomes negative once the angle from atan() function becomes negative, and this caused the robot to diverge
+    #This code fix the problem when the angle is shifted, dtheta should always be within from -pi to pi
+    if dtheta < -3.14: 
+        dtheta = dtheta + 6.28
+    elif dtheta > 3.14:
+        dtheta = dtheta -6.28
     
     #get the differential change of time
     dt = time1.dt() or 0.1  #can't divide by 0
@@ -174,11 +179,16 @@ def get_angleV_V(reference,position,quaternion,kp,ki,kd):  #take reference objec
 
     print(f'Error for angle is {dtheta}, derivative is {error1.get_dtheta_dt(dt)}, integral is {integral1.get_integral_theta()}.')
     print(f'Error for position is {dv}, derivative is {error1.get_dv_dt(dt)}, integral is {integral1.get_integral_v()}')
+    print(f'Reference Angle is {atan2(dy,dx)}, current angle is {quaternion.get_zangle()}')
 
     angular_velocity = dtheta*1 + error1.get_dtheta_dt(dt)*kd + integral1.get_integral_theta()*ki
+    
     #gain for angular velocity is changed to a different value (smaller value)
-    if angular_velocity > 5: angular_velocity = 5
-    if angular_velocity < -5: angular_velocity = -5
+    #if angular_velocity > 1: angular_velocity = 1
+    #if angular_velocity < -1: angular_velocity = -1
+    #if dv > 0.2: dv = 0.2   #linear velocity shouldn't be too big
+
+    #if dv<0.1: angular_velocity = 0     #make angular velocity 0 if the error is smaller than a threshold
 
     return angular_velocity ,dv*kp + error1.get_dv_dt(dt)*kd #+ integral1.get_integral_v()*ki     #multiply error by proportional gain to get final output
 
@@ -196,7 +206,7 @@ def pid_turtle():
     global integral1
     integral1 = IntegralSum()
 
-    kp = 2      #define proportional gain (kp)
+    kp = 1      #define proportional gain (kp)
     ki = 0    #integral gain
     kd = 0    #derivative gain
     reference_size = 1
