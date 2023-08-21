@@ -63,24 +63,24 @@ class Reference:
     def update_rectangle(self,dt,size):
         #this method updates the reference in a rectangular format
         dt = dt/5
-        while dt > 8: 
-            dt = dt- 8
+        while dt > 4: 
+            dt = dt- 4
         
-        if dt < 2:
+        if dt < 1:
             self.x = self.xi + dt*size
             self.y = self.yi
-        elif dt < 4:
-            dt = dt - 2
-            self.x = self.xi + 2*size
+        elif dt < 2:
+            dt = dt - 1
+            self.x = self.xi + 1*size
             self.y = self.yi + dt*size
-        elif dt < 6:
-            dt = dt - 4
-            self.x = self.xi + (2-dt)*size
-            self.y = self.yi + 2*size
+        elif dt < 3:
+            dt = dt - 2
+            self.x = self.xi + (1-dt)*size
+            self.y = self.yi + 1*size
         else:
-            dt = dt - 6
+            dt = dt - 3
             self.x = self.xi
-            self.y = self.yi + (2-dt)*size
+            self.y = self.yi + (1-dt)*size
 
 
 class Time:
@@ -158,7 +158,7 @@ def pos_update(data):   #update the current position(x,y,z) and quaternion
     
     quaternion1.update(data.pose.pose.orientation.x,data.pose.pose.orientation.y,data.pose.pose.orientation.z,data.pose.pose.orientation.w)
 
-def get_angleV_V(reference,position,quaternion,kp,ki,kd):  #take reference object, current positio object, and proportional gain as input
+def get_angleV_V(reference,position,quaternion,kp_v,ki_v,kd_v,kp_w,ki_w,kd_w):  #take reference object, current positio object, and proportional gain as input
     dx = reference.x - position.x
     dy = reference.y - position.y
     dtheta = atan2(dy,dx) - quaternion.get_zangle()  #use atan2 to get reference angle, and subtract current angle from reference to get error
@@ -181,7 +181,7 @@ def get_angleV_V(reference,position,quaternion,kp,ki,kd):  #take reference objec
     print(f'Error for position is {dv}, derivative is {error1.get_dv_dt(dt)}, integral is {integral1.get_integral_v()}')
     print(f'Reference Angle is {atan2(dy,dx)}, current angle is {quaternion.get_zangle()}')
 
-    angular_velocity = dtheta*1 + error1.get_dtheta_dt(dt)*kd + integral1.get_integral_theta()*ki
+    angular_velocity = dtheta*kp_w + error1.get_dtheta_dt(dt)*kd_w + integral1.get_integral_theta()*ki_w
     
     #gain for angular velocity is changed to a different value (smaller value)
     #if angular_velocity > 1: angular_velocity = 1
@@ -190,7 +190,7 @@ def get_angleV_V(reference,position,quaternion,kp,ki,kd):  #take reference objec
 
     #if dv<0.1: angular_velocity = 0     #make angular velocity 0 if the error is smaller than a threshold
 
-    return angular_velocity ,dv*kp + error1.get_dv_dt(dt)*kd #+ integral1.get_integral_v()*ki     #multiply error by proportional gain to get final output
+    return angular_velocity ,dv*kp_v + error1.get_dv_dt(dt)*kd_v + integral1.get_integral_v()*ki_v     #multiply error by proportional gain to get final output
 
 def pid_turtle():
     global time1
@@ -206,10 +206,22 @@ def pid_turtle():
     global integral1
     integral1 = IntegralSum()
 
-    kp = 1      #define proportional gain (kp)
-    ki = 0    #integral gain
-    kd = 0    #derivative gain
+    kp_v = float(input('Enter kp for linear velocity: '))      #define proportional gain for linear velocity(kp) 
+    ki_v = 0    #integral gain for linear velocity
+    kd_v = 0    #derivative gain for linear velocity
+
+    kp_w = float(input('Enter kp for angular velocity: '))      #define proportional gain for angular velocity(kp)
+    ki_w = 0    #integral gain for angular velocity
+    kd_w = 0    #derivative gain for angular velocity
+
+    #kp_v = 1 and kp_w = 2 will make the turtlebot track reference almost perfectly when reference_size = 1
+    #larger reference size will require kp_v to be smaller for turtlebot to not diverge
+
     reference_size = 1
+    #reference size = 4 will cause the turtlebot to diverge in square pattern, because reference is updating at a very fast rate
+    #reference_size = 1 is good 
+
+
     while not rospy.is_shutdown():
         rospy.init_node('pid_turtle', anonymous=True)
 
@@ -224,7 +236,6 @@ def pid_turtle():
         
 
         #update reference value based on new time and initial condition
-
         if reference1.xi == 0 and reference1.yi == 0:
             reference1.update_init(position1.x,position1.y)
         else:
@@ -241,7 +252,7 @@ def pid_turtle():
         twist_msg = Twist()
 
         #use function to get right value needed to operate the robot
-        twist_msg.angular.z,twist_msg.linear.x = get_angleV_V(reference1,position1,quaternion1,kp,ki,kd)
+        twist_msg.angular.z,twist_msg.linear.x = get_angleV_V(reference1,position1,quaternion1,kp_v,ki_v,kd_v,kp_w,ki_w,kd_w)
         
         pub.publish(twist_msg)
         rate.sleep()
