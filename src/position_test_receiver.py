@@ -24,5 +24,7 @@ def listener():
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
 
+    #this function is sufficient for getting the data 
+
 if __name__ == '__main__':
     listener()
